@@ -27,10 +27,6 @@ const calculatePaymentStatus = (pending_amount, base_amount, gst) => {
   return 'Part-Payment';
 };
 
-const calculateProfitAfterCommission = (base_amount, commission) => {
-  return base_amount - commission;
-};
-
 const calculateBank = (ota_name) => {
   return ['Direct', 'Extension'].includes(ota_name) ? 'Secondary' : 'Primary';
 };
@@ -40,7 +36,6 @@ const updatePaymentAndBank = async (booking_id, ota_name, payment_received, base
   const gst = calculateGST(ota_name, base_amount);
   const pending_amount = calculatePendingAmount(base_amount, gst, payment_received);
   const payment_status = calculatePaymentStatus(pending_amount, base_amount, gst);
-  const profit_after_commission = calculateProfitAfterCommission(base_amount, commission);
   const bank = calculateBank(ota_name);
 
   const { error } = await supabase
@@ -49,7 +44,6 @@ const updatePaymentAndBank = async (booking_id, ota_name, payment_received, base
       payment_received,
       pending_amount,
       payment_status,
-      profit_after_commission,
       bank,
       commission,
       gst
@@ -101,7 +95,6 @@ const createBooking = async (req, res) => {
     const gst = calculateGST(ota_name, baseAmount);
     const pending_amount = calculatePendingAmount(baseAmount, gst, paymentReceived);
     const payment_status = calculatePaymentStatus(pending_amount, baseAmount, gst);
-    const profit_after_commission = calculateProfitAfterCommission(baseAmount, commission);
     const bank = calculateBank(ota_name);
 
     const bookingData = {
@@ -117,7 +110,6 @@ const createBooking = async (req, res) => {
       payment_received: paymentReceived,
       pending_amount,
       payment_status,
-      profit_after_commission,
       bank,
       contact_number,
       other_info
@@ -139,7 +131,7 @@ const createBooking = async (req, res) => {
   }
 };
 
-// Get All Bookings
+// Get All Bookings and get Booking By Check-In Date
 const getAllBookings = async (req, res) => {
   const { check_in } = req.query;
   if (check_in) {

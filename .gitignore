@@ -1,0 +1,22 @@
+# Node modules
+/node_modules
+
+# Log files
+*.log
+
+# Environment variables (ensure you don't accidentally push secrets!)
+.env
+.env.local
+
+# Next.js build output
+.next
+
+# Optional .env files (if you're using them)
+*.env*
+
+# OS-specific files
+.DS_Store  # macOS
+Thumbs.db  # Windows
+
+# VSCode files
+.vscode/

@@ -1,23 +1,18 @@
 const { supabase } = require('../utils/supabase'); // Ensure correct import
 
 const createBed = async (req, res) => {
-  const { room_number,
-    room_type,
-    bed_number,
-    status,
-    bed_status,
-    guest_id } = req.body;
+  const { room_id,
+    bed_name,
+    status
+     } = req.body;
 
   // Insert new bed into the 'beds' table
   const { data, error } = await supabase
     .from('beds')
     .insert([{
-      room_number,
-      room_type,
-      bed_number,
-      status,
-      bed_status,
-      ...(guest_id && { guest_id }), // Only include guest_id if it exists
+      room_id,
+      bed_name,
+      status
     }])
     .single(); // Use .single() to return a single object
 
