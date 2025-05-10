@@ -65,11 +65,13 @@ const createBooking = async (req, res) => {
       base_amount,
       payment_received = 0,
       contact_number,
-      other_info
+      other_info,
+      guests_per_room, // { "1": 2, "2": 1, "3": 1 }
     } = req.body;
 
-    // Validate required fields
-    if (!booking_name || !ota_name || !number_of_adults || !check_in || !check_out || !base_amount) {
+    const rooms = Object.keys(guests_per_room);
+
+    if (!booking_name || !ota_name || !number_of_adults || !check_in || !check_out || !base_amount || !rooms.length) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
@@ -77,20 +79,16 @@ const createBooking = async (req, res) => {
     const paymentReceived = Number(payment_received);
     const checkInDate = dayjs(check_in);
     const checkOutDate = dayjs(check_out);
+    const number_of_nights = checkOutDate.diff(checkInDate, 'day');
 
-    if (!checkInDate.isValid() || !checkOutDate.isValid()) {
-      return res.status(400).json({ message: "Invalid check-in or check-out date format." });
-    }
-
-    if (checkOutDate.isBefore(checkInDate)) {
-      return res.status(400).json({ message: "Check-out date cannot be before check-in date." });
+    if (!checkInDate.isValid() || !checkOutDate.isValid() || checkOutDate.isBefore(checkInDate)) {
+      return res.status(400).json({ message: "Invalid or conflicting dates." });
     }
 
     if (isNaN(baseAmount) || baseAmount <= 0 || isNaN(paymentReceived) || paymentReceived < 0) {
-      return res.status(400).json({ message: "Invalid amount values." });
+      return res.status(400).json({ message: "Invalid payment values." });
     }
 
-    const number_of_nights = checkOutDate.diff(checkInDate, 'day');
     const commission = calculateCommission(ota_name, baseAmount);
     const gst = calculateGST(ota_name, baseAmount);
     const pending_amount = calculatePendingAmount(baseAmount, gst, paymentReceived);
@@ -115,19 +113,89 @@ const createBooking = async (req, res) => {
       other_info
     };
 
-    const { data, error } = await supabase
+    // Insert booking
+    const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert([bookingData])
+      .select()
       .single();
 
-    if (error) {
-      return res.status(500).json({ message: error.message });
+    if (bookingError || !booking) {
+      console.error("Booking insert failed:", bookingError, booking);
+      return res.status(500).json({ message: bookingError?.message || "Booking insert returned null." });
     }
 
-    res.status(201).json(data);
+    const bookingBedInserts = [];
+
+    for (const roomId of rooms) {
+      const guestCount = guests_per_room[roomId];
+
+      // Insert booking_room
+      const { data: bookingRoom, error: bookingRoomError } = await supabase
+        .from('booking_rooms')
+        .insert([{ booking_id: booking.booking_id, room_id: Number(roomId) }])
+        .select()
+        .single();
+
+      if (bookingRoomError) return res.status(500).json({ message: bookingRoomError.message });
+
+      // Fetch beds in room
+      const { data: bedsInRoom, error: bedsError } = await supabase
+        .from('beds')
+        .select('bed_id')
+        .eq('room_id', roomId);
+
+      if (bedsError) return res.status(500).json({ message: bedsError.message });
+
+      // Fetch occupied beds in date range
+      const { data: occupiedBeds, error: occupiedError } = await supabase
+      .from('booking_beds')
+      .select('bed_id')
+      .in('bed_id', bedsInRoom.map(b => b.bed_id))
+      .gt('check_out', new Date(checkInDate + 5.5 * 60 * 60 * 1000).toISOString())
+      .lt('check_in', new Date(checkOutDate + 5.5 * 60 * 60 * 1000).toISOString());
+
+
+      if (occupiedError) {
+        console.error(`Error fetching occupied beds for room ${roomId}:`, occupiedError.message);
+        return res.status(500).json({ message: occupiedError.message });
+      }
+
+      const occupiedBedIds = new Set(occupiedBeds.map(b => b.bed_id));
+      const availableBeds = bedsInRoom.filter(b => !occupiedBedIds.has(b.bed_id));
+
+      if (availableBeds.length < guestCount) {
+        console.warn(`Not enough available beds in room ${roomId}. Needed: ${guestCount}, Available: ${availableBeds.length}`);
+        return res.status(400).json({ message: `Not enough beds in room ${roomId}` });
+      }
+
+      // Assign beds
+      const bedsToAssign = availableBeds.slice(0, guestCount);
+
+      for (const bed of bedsToAssign) {
+        bookingBedInserts.push({
+          booking_id: booking.booking_id,
+          booking_room_id: bookingRoom.booking_room_id,
+          bed_id: bed.bed_id,
+          check_in,
+          check_out
+        });
+      }
+
+    }
+
+    // Insert all assigned beds
+    const { error: bookingBedsError } = await supabase
+      .from('booking_beds')
+      .insert(bookingBedInserts);
+
+    if (bookingBedsError) return res.status(500).json({ message: bookingBedsError.message });
+
+    res.status(201).json({ message: "Booking created and beds assigned", data: booking });
+
   } catch (error) {
-    console.error("Error creating booking:", error);
-    res.status(500).json({ message: "Server error while creating booking." });
+    console.error("Error in createBooking:", error);
+    res.status(500).json({ message: "Server error during booking creation." });
   }
 };
 
@@ -195,10 +263,66 @@ const deleteBooking = async (req, res) => {
   res.status(200).json({ message: "Booking deleted successfully", data });
 };
 
+// Get Bookings mapped by bed and date
+const getBookingsByBedAndDateRange = async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  if (!startDate || !endDate) {
+    return res.status(400).json({ message: "startDate and endDate are required" });
+  }
+
+  console.log("Start date" + startDate);
+  console.log("End date" + endDate);
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .select(`
+      booking_id,
+      booking_name,
+      check_in,
+      check_out,
+      booking_rooms (
+        booking_room_id,
+        room_id,
+        booking_beds (
+          bed_id
+        )
+      )
+    `)
+    .or(`and(check_in.lte.${endDate},check_out.gte.${startDate})`);
+
+  if (error) {
+    return res.status(500).json({ message: error.message });
+  }
+
+  const bookingsByBedAndDate = {};
+
+  data.forEach((booking) => {
+    const { booking_name, check_in, check_out, booking_rooms } = booking;
+    const checkIn = new Date(check_in);
+    const checkOut = new Date(check_out);
+
+    for (let d = new Date(checkIn); d < checkOut; d.setDate(d.getDate() + 1)) {
+      const dateKey = d.toISOString().split('T')[0];
+
+      booking_rooms?.forEach((room) => {
+        room.booking_beds?.forEach((bed) => {
+          const bedId = bed.bed_id;
+          if (!bookingsByBedAndDate[bedId]) bookingsByBedAndDate[bedId] = {};
+          bookingsByBedAndDate[bedId][dateKey] = booking_name;
+        });
+      });
+    }
+  });
+
+  return res.status(200).json(bookingsByBedAndDate);
+};
+
 module.exports = {
   createBooking,
   getAllBookings,
   getBooking,
   updateBooking,
-  deleteBooking
+  deleteBooking,
+  getBookingsByBedAndDateRange
 };
