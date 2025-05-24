@@ -1,37 +1,5 @@
 const { supabase } = require('../supabase');
-
-const commissionRates = {
-  'Booking.com': 0.15,
-  'Hostelworld': 0.15,
-  'Makemytrip': 0,
-  'Agoda': 0,
-  'Direct': 0,
-  'Website': 0,
-  'Extension': 0,
-  'Other': 0,
-};
-
-const gstRates = {
-  'Booking.com': 0.12,
-  'Hostelworld': 0.12,
-  'Makemytrip': 0,
-  'Agoda': 0,
-  'Direct': 0,
-  'Website': 0,
-  'Extension': 0,
-  'Other': 0,
-};
-
-const banks = {
-  'Booking.com': 'Primary',
-  'Hostelworld': 'Primary',
-  'Makemytrip': 'Primary',
-  'Agoda': 'Primary',
-  'Direct': 'Secondary',
-  'Website': 'Primary',
-  'Extension': 'Secondary',
-  'Other': 'Secondary',
-};
+const { commissionRates, gstRates, banks } = require('./constants');
 
 const calculateCommission = (otaName, baseAmount) => {
   const rate = commissionRates[otaName] ?? commissionRates['Other'];
@@ -58,6 +26,25 @@ const calculateBank = (otaName) => {
     return bankName;
 };
 
+// ✅ Master function
+const calculateFinancials = (bookingData) => {
+  const { ota_name, base_amount, payment_received } = bookingData;
+
+  const commission = calculateCommission(ota_name, base_amount);
+  const gst = calculateGST(ota_name, base_amount);
+  const pending_amount = calculatePendingAmount(base_amount, gst, payment_received);
+  const payment_status = calculatePaymentStatus(pending_amount, base_amount, gst);
+  const bank = calculateBank(ota_name);
+
+  return {
+    commission,
+    gst,
+    pending_amount,
+    payment_status,
+    bank,
+  };
+}
+
 const updatePaymentAndBank = async (booking_id, ota_name, payment_received, base_amount) => {
   const commission = calculateCommission(ota_name, base_amount);
   const gst = calculateGST(ota_name, base_amount);
@@ -77,7 +64,11 @@ const updatePaymentAndBank = async (booking_id, ota_name, payment_received, base
     })
     .eq('booking_id', booking_id);
 
-  if (error) throw new Error(error.message);
+  if (error) 
+  {
+    console.error(error.message);
+    throw new Error(`Could not update Payment details`);
+  }
 };
 
 module.exports = {
@@ -86,5 +77,6 @@ module.exports = {
   calculatePendingAmount,
   calculatePaymentStatus,
   calculateBank,
+  calculateFinancials,
   updatePaymentAndBank,
 };

@@ -1,4 +1,12 @@
-const { createBookingService, getAllBookingsService, getBookingService, updateBookingService, deleteBookingService, getBookingsByBedAndDateRangeService } = require('../services/bookingService');
+const { 
+  createBookingService, 
+  getAllBookingsService, 
+  getBookingService, 
+  updateBookingService, 
+  deleteBookingService, 
+  getBookingsByBedAndDateRangeService, 
+  getBookingWithRoomsAndBedsService 
+} = require('../services/bookingService');
 
 const createBooking = async (req, res) => {
   try {
@@ -12,8 +20,8 @@ const createBooking = async (req, res) => {
 
 const getAllBookings = async (req, res) => {
   try {
-    const response = await getAllBookingsService(req.query);
-    return res.status(200).json(response);
+    const response = await getAllBookingsService(req.query.check_in);
+    return res.status(200).json({ bookings: response });
   } catch (error) {
     console.error('getAllBookings error:', error);
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
@@ -52,10 +60,28 @@ const deleteBooking = async (req, res) => {
 
 const getBookingsByBedAndDateRange = async (req, res) => {
   try {
-    const response = await getBookingsByBedAndDateRangeService(req.query);
+    const { startDate, endDate } = req.query;
+    const response = await getBookingsByBedAndDateRangeService(startDate, endDate);
     return res.status(200).json(response);
   } catch (error) {
     console.error('getBookingsByBedAndDateRange error:', error);
+    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+  }
+};
+
+const getBookingWithRoomsAndBeds = async (req, res) => {
+  try {    
+    const { booking_id } = req.query;
+    if (!booking_id) 
+      {
+        console.error('booking_id is required');
+        throw new Error('Booking could not be fetched');
+      }
+    const response = await getBookingWithRoomsAndBedsService(booking_id);
+    return res.status(200).json(response);
+  }
+  catch (error) {
+    console.error('getBookingWithRoomsAndBeds error:', error);
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 };
@@ -66,5 +92,6 @@ module.exports = {
   getBooking,
   updateBooking,
   deleteBooking,
-  getBookingsByBedAndDateRange
+  getBookingsByBedAndDateRange,
+  getBookingWithRoomsAndBeds
 };
