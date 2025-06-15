@@ -43,32 +43,6 @@ const calculateFinancials = (bookingData) => {
     payment_status,
     bank,
   };
-}
-
-const updatePaymentAndBank = async (booking_id, ota_name, payment_received, base_amount) => {
-  const commission = calculateCommission(ota_name, base_amount);
-  const gst = calculateGST(ota_name, base_amount);
-  const pending_amount = calculatePendingAmount(base_amount, gst, payment_received);
-  const payment_status = calculatePaymentStatus(pending_amount, base_amount, gst);
-  const bank = calculateBank(ota_name);
-
-  const { error } = await supabase
-    .from('bookings')
-    .update({
-      payment_received,
-      pending_amount,
-      payment_status,
-      bank,
-      commission,
-      gst
-    })
-    .eq('booking_id', booking_id);
-
-  if (error) 
-  {
-    console.error(error.message);
-    throw new Error(`Could not update Payment details`);
-  }
 };
 
 module.exports = {
@@ -78,5 +52,4 @@ module.exports = {
   calculatePaymentStatus,
   calculateBank,
   calculateFinancials,
-  updatePaymentAndBank,
 };

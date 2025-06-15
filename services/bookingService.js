@@ -1,7 +1,7 @@
 const { supabase } = require('../utils/supabase');
 const { preBookingChecks } = require('../utils/bookings/preBookingChecks');
 const { calculateFinancials } = require('../utils/bookings/financials');
-const { assignBeds } = require('../utils/bookings/bedManagement');
+const { assignBeds, deleteBookingAssignments } = require('../utils/bookings/bedManagement');
 const { insertBooking } = require('../utils/bookings/insertBookings');
 
 const createBookingService = async (bookingData) => {
@@ -99,23 +99,80 @@ const getBookingService = async (id) => {
 };
 
 const updateBookingService = async (id, updateData) => {
-  const { data, error } = await supabase.from('bookings').update(updateData).eq('booking_id', id);
-  if (error)
-  {
-    console.error(error.message);
-    throw new Error(`Could not update the booking`);
+  const { requiresReassignment, guests_per_room, ...sanitizedData } = updateData;
+
+  // 1. Financial and nights recalculation if needed
+  const needsFinancialUpdate =
+    sanitizedData.base_amount !== undefined || sanitizedData.payment_received !== undefined;
+
+  if (needsFinancialUpdate) {
+    const financials = calculateFinancials({
+      ...sanitizedData,
+      ota_name: sanitizedData.ota_name,
+    });
+
+    Object.assign(sanitizedData, financials);
   }
 
-  if (updateData.payment_received !== undefined || updateData.base_amount !== undefined) {
-    await updatePaymentAndBank(
-      id,
-      updateData.ota_name,
-      Number(updateData.payment_received),
-      Number(updateData.base_amount)
+  const needsNightsUpdate =
+    sanitizedData.check_in !== undefined || sanitizedData.check_out !== undefined;
+
+  if (needsNightsUpdate) {
+    sanitizedData.number_of_nights = Math.ceil(
+      (new Date(sanitizedData.check_out) - new Date(sanitizedData.check_in)) / (1000 * 60 * 60 * 24)
     );
   }
 
-  return data;
+  // 2. Perform the actual update
+  const { data: updatedBookings, error } = await supabase
+    .from('bookings')
+    .update(sanitizedData)
+    .eq('booking_id', id)
+    .select('*');
+
+  if (error) {
+    console.error(`❌ Error updating booking:`, error.message);
+    throw new Error(`Could not update the booking`);
+  }
+
+  const updatedBooking = updatedBookings?.[0];
+
+  // 3. Bed reassignment if flagged
+  const guestsPerRoom = guests_per_room;
+
+  if (requiresReassignment && updatedBooking && guestsPerRoom && typeof guestsPerRoom === 'object') {
+
+    await deleteBookingAssignments(id);
+
+    for (const [roomId, numberOfGuests] of Object.entries(guestsPerRoom)) {
+      const room_id = parseInt(roomId); // Ensure it's a number
+
+      // Insert booking_room
+      const { data: newRoom, error: roomInsertError } = await supabase
+        .from('booking_rooms')
+        .insert({
+          booking_id: id,
+          room_id,
+          number_of_guests: numberOfGuests,
+        })
+        .select()
+        .single();
+
+      if (roomInsertError) {
+        console.error(`❌ Failed to insert new booking_room for room_id ${room_id}:`, roomInsertError.message);
+        throw new Error('Error re-adding booking room');
+      }
+      await assignBeds(
+        id,
+        newRoom.booking_room_id,
+        room_id,
+        numberOfGuests,
+        updatedBooking.check_in,
+        updatedBooking.check_out
+      );
+    }
+  }
+  return updatedBooking;
 };
 
 const deleteBookingService = async (id) => {

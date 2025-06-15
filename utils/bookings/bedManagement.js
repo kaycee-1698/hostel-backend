@@ -63,4 +63,31 @@ const assignBeds = async (
   }
 };
 
-module.exports = { assignBeds };
+const deleteBookingAssignments = async (booking_id) => {
+  // Delete booking_beds first (child)
+  const { error: bedDeleteError } = await supabase
+    .from('booking_beds')
+    .delete()
+    .eq('booking_id', booking_id);
+
+  if (bedDeleteError) {
+    console.error(`[deleteBookingAssignments] Failed to delete booking_beds:`, bedDeleteError.message);
+    throw new Error('Error deleting bed assignments');
+  }
+
+  // Delete booking_rooms next (parent)
+  const { error: roomDeleteError } = await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', booking_id);
+
+  if (roomDeleteError) {
+    console.error(`[deleteBookingAssignments] Failed to delete booking_rooms:`, roomDeleteError.message);
+    throw new Error('Error deleting room assignments');
+  }
+};
+
+module.exports = {
+  assignBeds,
+  deleteBookingAssignments,
+};
