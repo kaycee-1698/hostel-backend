@@ -37,7 +37,7 @@ const checkAvailability = async (room_id, check_in, check_out, beds_required, ex
   const occupiedBedIds = new Set(overlappingBookings.map((b) => b.bed_id));
   const availableBeds = bedIds.filter((id) => !occupiedBedIds.has(id));
 
-  return availableBeds.length >= beds_required;
+  return availableBeds.length;
 };
 
 module.exports = { checkAvailability };

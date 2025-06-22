@@ -1,4 +1,5 @@
 const { supabase } = require('../utils/supabase'); // Ensure correct import
+const { getRoomAvailabilityService } = require('../services/roomService'); // Import the service
 
 const createRoom = async (req, res) => {
   const { room_name,
@@ -122,4 +123,21 @@ const deleteRoom = async (req, res) => {
     return res.status(200).json({ capacity: newCapacity });
   };  
 
-module.exports = { createRoom, getAllRooms, updateRoom, deleteRoom, getRoom, updateRoomCapacity};;
+  const getRoomAvailability = async (req, res) => {
+    const { id } = req.params;
+    const { 
+      check_in, 
+      check_out, 
+      beds_required, 
+      exclude_booking_id = null // Default to null if not provided
+    } = req.query;
+    try {
+      const response = await getRoomAvailabilityService(id, check_in, check_out, beds_required, exclude_booking_id);
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error('getRoomAvailability error:', error);
+      return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    }
+  };
+
+module.exports = { createRoom, getAllRooms, updateRoom, deleteRoom, getRoom, updateRoomCapacity, getRoomAvailability };

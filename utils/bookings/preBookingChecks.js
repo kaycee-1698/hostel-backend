@@ -22,7 +22,7 @@ const preBookingChecks = async(bookingData) => {
       bedsRequired
     );
 
-    if (!isAvailable) {
+    if (isAvailable <= 0) {
       //Fetch room name
       const { data: room, error: roomError } = await supabase
         .from('rooms')
