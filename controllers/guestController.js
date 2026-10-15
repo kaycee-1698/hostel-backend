@@ -1,38 +1,14 @@
 const { supabase } = require('../utils/supabase'); // Ensure correct import
 
+const { createGuestService } = require('../services/guestService');
+
 const createGuest = async (req, res) => {
-  const { first_name, last_name, birthday, email, phone, city, country, gender, travelling_as, purpose_of_visit, how_heard_about_us, stayed_before, id_type, id_number, agree_tnc, agree_checkout, booking_id } = req.body;
-
-  // Insert new guest into the 'guests' table
-  const { data, error } = await supabase
-    .from('guests')
-    .insert([{
-      created_at: new Date(), // Optional: If you want to handle this explicitly
-      first_name, 
-      last_name, 
-      birthday, 
-      email, 
-      phone, 
-      city, 
-      country, 
-      gender, 
-      travelling_as, 
-      purpose_of_visit, 
-      how_heard_about_us, 
-      stayed_before, 
-      id_type, 
-      id_number, 
-      agree_tnc, 
-      agree_checkout,
-      booking_id
-    }])
-    .single(); // Use .single() to return a single object
-
-  if (error) {
-    return res.status(500).json({ message: error.message });
+  try {
+    const guest = await createGuestService(req.body);
+    return res.status(201).json({ guest });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message });
   }
-
-  res.status(201).json({ guest: data });
 };
 
 const getAllGuests = async (req, res) => {

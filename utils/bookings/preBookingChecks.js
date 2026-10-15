@@ -15,14 +15,14 @@ const preBookingChecks = async(bookingData) => {
   // 2. Check bed availability per room
   for (const roomId in guests_per_room) {
     const bedsRequired = guests_per_room[roomId];
-    const isAvailable = await checkAvailability(
+    const availableBeds = await checkAvailability(
       parseInt(roomId),
       check_in,
       check_out,
       bedsRequired
     );
 
-    if (isAvailable <= 0) {
+    if (availableBeds < bedsRequired) {
       //Fetch room name
       const { data: room, error: roomError } = await supabase
         .from('rooms')

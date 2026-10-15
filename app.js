@@ -5,6 +5,7 @@ const cors = require("cors"); //middleware for enabling CORS (Cross-Origin Resou
 const app = express(); //create an instance of express application
 
 app.use(cors()); //Enable cors
+app.use('/guests', express.json({ limit: '22mb' })); // Up to three 5 MB images, base64 encoded
 app.use(express.json()); //Parse incoming JSON requests
 
 // Routes to handle specific API requests
@@ -28,7 +29,7 @@ app.use(roomRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
-  res.status(500).json({ message: err.message });
+  res.status(err.status || 500).json({ message: err.status === 413 ? 'Check-in images are too large. Maximum 5 MB per image.' : err.message });
 });
 
 module.exports = app;

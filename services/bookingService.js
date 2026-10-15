@@ -1,7 +1,7 @@
 const { supabase } = require('../utils/supabase');
 const { preBookingChecks } = require('../utils/bookings/preBookingChecks');
 const { calculateFinancials } = require('../utils/bookings/financials');
-const { assignBeds, deleteBookingAssignments } = require('../utils/bookings/bedManagement');
+const { assignBeds } = require('../utils/bookings/bedManagement');
 const { insertBooking } = require('../utils/bookings/insertBookings');
 
 const createBookingService = async (bookingData) => {
@@ -123,56 +123,28 @@ const updateBookingService = async (id, updateData) => {
     );
   }
 
-  // 2. Perform the actual update
+  if (requiresReassignment) {
+    // One RPC is one database transaction: errors roll back the booking AND beds.
+    // Never fall back to separate writes if the migration has not been installed.
+    const { data, error } = await supabase.rpc('update_booking_with_assignments', {
+      p_booking_id: id,
+      p_updates: sanitizedData,
+      p_guests_per_room: guests_per_room ?? null,
+    });
+    if (error) {
+      throw new Error(error.message || 'Could not update booking and bed assignments');
+    }
+    return data;
+  }
+
   const { data: updatedBookings, error } = await supabase
     .from('bookings')
     .update(sanitizedData)
     .eq('booking_id', id)
     .select('*');
 
-  if (error) {
-    console.error(`❌ Error updating booking:`, error.message);
-    throw new Error(`Could not update the booking`);
-  }
-
-  const updatedBooking = updatedBookings?.[0];
-
-  // 3. Bed reassignment if flagged
-  const guestsPerRoom = guests_per_room;
-
-  if (requiresReassignment && updatedBooking && guestsPerRoom && typeof guestsPerRoom === 'object') {
-
-    await deleteBookingAssignments(id);
-
-    for (const [roomId, numberOfGuests] of Object.entries(guestsPerRoom)) {
-      const room_id = parseInt(roomId); // Ensure it's a number
-
-      // Insert booking_room
-      const { data: newRoom, error: roomInsertError } = await supabase
-        .from('booking_rooms')
-        .insert({
-          booking_id: id,
-          room_id,
-          number_of_guests: numberOfGuests,
-        })
-        .select()
-        .single();
-
-      if (roomInsertError) {
-        console.error(`❌ Failed to insert new booking_room for room_id ${room_id}:`, roomInsertError.message);
-        throw new Error('Error re-adding booking room');
-      }
-      await assignBeds(
-        id,
-        newRoom.booking_room_id,
-        room_id,
-        numberOfGuests,
-        updatedBooking.check_in,
-        updatedBooking.check_out
-      );
-    }
-  }
-  return updatedBooking;
+  if (error) throw new Error('Could not update the booking');
+  return updatedBookings?.[0];
 };
 
 const deleteBookingService = async (id) => {
