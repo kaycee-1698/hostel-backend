@@ -55,13 +55,13 @@ test('insufficient capacity in a later room stops creation before any writes', a
   let writes = 0;
   const unexpectedWrite = () => { writes++; throw new Error('Unexpected write'); };
   const { createBookingService } = loadModule('../services/bookingService.js', {
-    '../utils/supabase': { supabase: { from: unexpectedWrite } },
-    '../utils/bookings/preBookingChecks': { preBookingChecks: makeChecks({ 1: 1, 2: 1 }) },
+    '../utils/supabase': { supabase: { from: unexpectedWrite, rpc: async()=>({error:{code:'P0001',message:'Dorm does not have 2 available beds'}}) } },
+    '../utils/bookings/validateBookingData': { validateBookingData },
     '../utils/bookings/financials': { calculateFinancials: () => ({}) },
     '../utils/bookings/bedManagement': { assignBeds: unexpectedWrite },
     '../utils/bookings/insertBookings': { insertBooking: unexpectedWrite },
   });
-  await assert.rejects(createBookingService({ ...booking, guests_per_room: { 1: 1, 2: 2 } }),
-    /Dorm does not have 2 available bed/);
+  await assert.rejects(createBookingService({ ...booking, create_request_id:'11111111-1111-4111-8111-111111111111', guests_per_room: { 1: 1, 2: 2 } }),
+    /enough beds available/);
   assert.equal(writes, 0);
 });

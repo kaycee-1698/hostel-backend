@@ -43,3 +43,18 @@ and remaining limitations.
 The additional disposable-database test is `tests/guestDocuments.sql`; it checks
 that a failed image insert rolls back the guest and that successful image records
 reference the new guest. It is not a live-project migration.
+
+## Booking creation permissions and automatic bed assignment
+
+Migration 007 keeps duplicate-save receipts private using RLS. The backend needs
+its own Supabase secret/service-role credential, configured as
+`SUPABASE_SERVICE_ROLE_KEY` in `hostel-backend/.env` (or the backend hosting
+provider's environment settings). Restart the backend after changing it.
+`SUPABASE_API_KEY` remains a fallback for existing server configurations.
+Never put this credential in frontend files or any `NEXT_PUBLIC_` variable.
+Do not disable RLS or grant anonymous access to the receipt table to fix this error.
+
+New booking requests select dorms and guest counts. The backend allocates beds
+available for the entire stay, ignoring a preferred bed from older clients.
+No additional SQL migration is required for this automatic-allocation change;
+migrations 006 and 007 must already be installed.

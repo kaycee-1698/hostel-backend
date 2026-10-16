@@ -11,7 +11,7 @@ const checkAvailability = async (room_id, check_in, check_out, beds_required, ex
     throw new Error(`Failed to fetch beds.`);
   }
 
-  if (!beds || beds.length === 0) return false;
+  if (!beds || beds.length === 0) return 0;
 
   const bedIds = beds.map((bed) => bed.bed_id);
 

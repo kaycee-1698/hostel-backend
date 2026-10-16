@@ -45,23 +45,11 @@ const assignBedToBookingRoom = async (req, res) => {
   
   // PUT /booking-beds/:id - Reassign bed (e.g. drag & drop in calendar UI).
   const reassignBed = async (req, res) => {
-    const { id } = req.params;
-    const { bed_id } = req.body;
-  
     try {
-      const { data, error } = await supabase
-        .from('booking_beds')
-        .update({ bed_id })
-        .eq('booking_bed_id', id)
-        .select()
-        .single();
-  
-      if (error) throw error;
-  
-      res.json(data);
+      const { moveBedAssignment } = require('../services/bedMoveService');
+      res.json(await moveBedAssignment(req.params.id, req.body));
     } catch (error) {
-      console.error('Error reassigning bed:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(error.status || 500).json({ error: error.message });
     }
   };
   

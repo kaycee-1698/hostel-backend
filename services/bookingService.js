@@ -1,78 +1,37 @@
 const { supabase } = require('../utils/supabase');
-const { preBookingChecks } = require('../utils/bookings/preBookingChecks');
+const { validateBookingData } = require('../utils/bookings/validateBookingData');
 const { calculateFinancials } = require('../utils/bookings/financials');
-const { assignBeds } = require('../utils/bookings/bedManagement');
-const { insertBooking } = require('../utils/bookings/insertBookings');
 
 const createBookingService = async (bookingData) => {
-  const {
-    guests_per_room,
-    number_of_adults,
-    base_amount,
-    payment_received,
-    ota_name,
-    check_in,
-    check_out,
-    ...rest
-  } = bookingData;
-
-  try {
-    await preBookingChecks(bookingData);
-  } catch (err) {
-    console.error(`Pre-booking check failed: ${err.message}`);
-    throw new Error(`${err.message}`);
+  const validation = validateBookingData(bookingData);
+  if (validation) throw new Error(validation);
+  const { guests_per_room, preferred_bed_id, create_request_id, ...details } = bookingData;
+  if (typeof create_request_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(create_request_id)) {
+    throw new Error('A valid booking request ID is required. Refresh and try again.');
   }
-
-  const financials = calculateFinancials(bookingData);
-  const number_of_nights = Math.ceil(
-    (new Date(check_out) - new Date(check_in)) / (1000 * 60 * 60 * 24)
-  );
-
-  const booking = await insertBooking(
-    { ...rest, guests_per_room, number_of_adults, base_amount, payment_received, ota_name, check_in, check_out },
-    financials,
-    number_of_nights
-  );
-
-  const booking_id = booking.booking_id;
-
-  const bookingRoomInserts = Object.entries(guests_per_room).map(
-    ([room_id, number_of_guests]) => ({
-      booking_id,
-      room_id: parseInt(room_id),
-      number_of_guests: parseInt(number_of_guests),
-      assigned_at: new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString()
-    })
-  );
-
-  const { data: insertedRooms, error: bookingRoomError } = await supabase
-    .from('booking_rooms')
-    .insert(bookingRoomInserts)
-    .select();
-
-  if (bookingRoomError) 
-  {
-    console.error(`Failed to insert booking_rooms: ${bookingRoomError.message}`);
-    throw new Error(`Error while assigning rooms for this booking`);
-  }
-
-  for (const room of insertedRooms) {
-    try {
-      await assignBeds(
-        booking_id,
-        room.booking_room_id,
-        room.room_id,
-        room.number_of_guests,
-        check_in,
-        check_out
-      );
-    } catch (err) {
-      console.error(`Failed to assign beds for room ${room.room_id}: ${err.message}`);
-      throw new Error(`Error while assigning beds for this booking`);
+  const { data, error } = await supabase.rpc('create_booking_once', {
+    p_request_id: create_request_id,
+    p_booking: { ...details, ...calculateFinancials(bookingData) },
+    p_guests_per_room: guests_per_room,
+    // Calendar clicks select a dorm, not a mandatory bed. Allocate for the full stay.
+    p_preferred_bed_id: null,
+  });
+  if (error) {
+    // Keep database diagnostics in server logs, never in the staff-facing form.
+    console.error('Booking creation failed:', error);
+    const message = error.message || '';
+    if (error.code === 'P0001' && /does not have .* available bed/.test(message)) {
+      throw new Error('There aren’t enough beds available in the selected dorm for the full stay. Choose another dorm or change the dates.');
     }
+    if (error.code === 'P0001' && /already used for different|already created and later deleted/.test(message)) {
+      throw new Error('This booking request was already processed. Close this form and check the bookings list before starting another.');
+    }
+    if (error.code === '42501' || /row-level security|permission denied/i.test(message)) {
+      throw new Error('We couldn’t save the booking because of a system setup issue. Please ask your administrator to check booking permissions. Your entries are still here.');
+    }
+    throw new Error('We couldn’t confirm that the booking was saved. Please retry this same form; retrying will not create a duplicate.');
   }
-
-  return booking;
+  return data;
 };
 
 const getAllBookingsService = async (check_in) => {
@@ -123,7 +82,7 @@ const updateBookingService = async (id, updateData) => {
     );
   }
 
-  if (requiresReassignment) {
+  if (requiresReassignment || guests_per_room || needsNightsUpdate || sanitizedData.number_of_adults !== undefined) {
     // One RPC is one database transaction: errors roll back the booking AND beds.
     // Never fall back to separate writes if the migration has not been installed.
     const { data, error } = await supabase.rpc('update_booking_with_assignments', {
@@ -148,61 +107,36 @@ const updateBookingService = async (id, updateData) => {
 };
 
 const deleteBookingService = async (id) => {
-  const { data, error } = await supabase.from('bookings').delete().eq('booking_id', id);
-  if (error)
-  {
-    console.error(error.message);
-    throw new Error(`Could not delete the booking`);
+  const bookingId = Number(id);
+  if (!Number.isSafeInteger(bookingId) || bookingId <= 0) throw new Error('Invalid booking ID');
+  const { data, error } = await supabase.rpc('delete_booking_with_assignments', { p_booking_id: bookingId });
+  if (error) {
+    console.error('Booking deletion failed:', error);
+    if (error.code === 'P0001') throw new Error(error.message);
+    if (error.code === '23503') throw new Error('This booking has linked records and cannot be deleted.');
+    throw new Error('Could not delete the booking. Check that database migration 003 is installed.');
   }
   return data;
 };
 
 const getBookingsByBedAndDateRangeService = async (startDate, endDate) => {
-  const { data, error } = await supabase
-    .from('bookings')
-    .select(`
-      booking_id,
-      booking_name,
-      check_in,
-      check_out,
-      booking_rooms (
-        booking_room_id,
-        room_id,
-        booking_beds (
-          bed_id
-        )
-      )
-    `)
-    .or(`and(check_in.lte.${endDate},check_out.gte.${startDate})`)
-
-  if (error)
-  {
-    console.error(error.message);
-    throw new Error(`Could not fetch bookings for this date range`);
-  }
-
-  const bookingsByBedAndDate = {};
-  data.forEach((booking) => {
-    const { booking_name, check_in, check_out, booking_rooms } = booking;
-    const checkIn = new Date(check_in);
-    const checkOut = new Date(check_out);
-
-    for (let d = new Date(checkIn); d < checkOut; d.setDate(d.getDate() + 1)) {
-      const dateKey = d.toISOString().split('T')[0];
-      booking_rooms?.forEach((room) => {
-        room.booking_beds?.forEach((bed) => {
-          const bedId = bed.bed_id;
-          if (!bookingsByBedAndDate[bedId]) bookingsByBedAndDate[bedId] = {};
-          bookingsByBedAndDate[bedId][dateKey] = {
-            booking_id: booking.booking_id,
-            booking_name
-          };
-        });
-      });
+  const { data, error } = await supabase.from('booking_beds')
+    .select('booking_bed_id, booking_id, bed_id, check_in, check_out, bookings!inner(booking_name)')
+    .lte('check_in', endDate).gt('check_out', startDate);
+  if (error) throw new Error('Could not fetch bookings for this date range');
+  const calendarBookings = {};
+  for (const assignment of data) {
+    const { booking_bed_id, booking_id, bed_id, check_in, check_out } = assignment;
+    const start = new Date(Math.max(Date.parse(check_in), Date.parse(startDate)));
+    for (let date = start; date < new Date(check_out) && date <= new Date(endDate); date.setUTCDate(date.getUTCDate() + 1)) {
+      const key = date.toISOString().slice(0, 10);
+      calendarBookings[bed_id] ||= {};
+      calendarBookings[bed_id][key] = {
+        booking_bed_id, booking_id, booking_name: assignment.bookings.booking_name, check_in, check_out,
+      };
     }
-  });
-
-  return bookingsByBedAndDate;
+  }
+  return { calendarBookings };
 };
 
 const getBookingWithRoomsAndBedsService = async (booking_id) => {
