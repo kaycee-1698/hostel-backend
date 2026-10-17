@@ -6,7 +6,7 @@ const app = express(); //create an instance of express application
 
 app.use(cors()); //Enable cors
 app.use('/guests', express.json({ limit: '22mb' })); // Up to three 5 MB images, base64 encoded
-app.use(express.json()); //Parse incoming JSON requests
+app.use(express.json({limit:'1mb'})); //Parse incoming JSON requests
 
 // Routes to handle specific API requests
 const bedRoutes = require('./routes/bedRoutes'); 
@@ -26,6 +26,7 @@ app.use(guestRoutes);
 app.use(imageRoutes);
 app.use(paymentRoutes);
 app.use(roomRoutes);
+app.use(require('./routes/rateRoutes'));
 
 // Global error handler
 app.use((err, req, res, next) => {

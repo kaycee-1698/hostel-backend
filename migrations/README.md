@@ -58,3 +58,27 @@ New booking requests select dorms and guest counts. The backend allocates beds
 available for the entire stay, ignoring a preferred bed from older clients.
 No additional SQL migration is required for this automatic-allocation change;
 migrations 006 and 007 must already be installed.
+
+## Room rates (migration 008)
+
+Run `008_room_rates.sql` once before starting the updated application. It sets
+all existing rooms' new base rate to ₹600 and requires a base rate for future
+rooms. Daily overrides have a unique room/date key and save atomically through
+`save_room_daily_rates`. Use the backend secret/service-role credential; RLS
+keeps the override table private. Booking amounts are not changed.
+
+Browser-only preview rooms and rates are not imported. The calendar uses the
+stored daily override, falling back to the room's base rate. Bulk saves omit
+rooms with empty price fields. Test `tests/roomRates.sql` only in an empty,
+disposable database.
+
+## Restoring base rates (migration 009)
+
+Apply `009_restore_base_rates.sql` after 008. It replaces the rate-saving function
+so a null rate removes that date's override atomically with other edits. It does
+not modify existing rates or booking amounts when installed.
+
+Rate reads now require `start` and `end` date parameters. New-booking quotes sum
+occupied nights (checkout excluded), times the allocated beds in each room,
+using daily overrides or the room base rate. Quotes exclude taxes and never
+update existing booking amounts; the entered booking price remains authoritative.

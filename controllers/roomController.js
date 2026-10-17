@@ -2,18 +2,20 @@ const { supabase } = require('../utils/supabase'); // Ensure correct import
 const { getRoomAvailabilityService } = require('../services/roomService'); // Import the service
 
 const createRoom = async (req, res) => {
-  const { room_name,
+  const { room_name, base_rate,
     capacity = 0 // Default capacity to 0 if not provided
      } = req.body;
+
+  if(typeof room_name!=='string'||!room_name.trim()||!require('../services/rateValidation').validAmount(base_rate))return res.status(400).json({error:'Enter a room name and valid base rate.'});
 
   // Insert new room into the 'rooms' table
   const { data, error } = await supabase
     .from('rooms')
     .insert([{
       room_name,
-      capacity
+      capacity, base_rate
     }])
-    .single(); // Use .single() to return a single object
+    .select().single(); // Use .single() to return a single object
 
   if (error) {
     return res.status(500).json({ message: error.message });
