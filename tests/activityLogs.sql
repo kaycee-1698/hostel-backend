@@ -1,0 +1,47 @@
+CREATE ROLE service_role BYPASSRLS;
+CREATE ROLE anon;
+CREATE ROLE authenticated;
+CREATE TABLE bookings(booking_id bigint PRIMARY KEY,booking_name text,contact_number text,base_amount numeric,check_in date,check_out date,other_info text);
+CREATE TABLE rooms(room_id bigint PRIMARY KEY,room_name text,base_rate numeric);
+CREATE TABLE beds(bed_id bigint PRIMARY KEY,room_id bigint,bed_name text);
+CREATE TABLE booking_rooms(booking_room_id bigint PRIMARY KEY,booking_id bigint,room_id bigint);
+CREATE TABLE booking_beds(booking_bed_id bigint PRIMARY KEY,booking_id bigint,booking_room_id bigint,bed_id bigint,check_in date,check_out date);
+CREATE TABLE room_daily_rates(room_id bigint,stay_date date,rate numeric,PRIMARY KEY(room_id,stay_date));
+CREATE TABLE guests(guest_id bigint PRIMARY KEY,booking_id bigint,first_name text,id_number text);
+CREATE TABLE payments(payment_id bigint PRIMARY KEY,booking_id bigint,amount_paid numeric);
+CREATE TABLE images(image_id bigint PRIMARY KEY,guest_id bigint,image_type text,"imageURL" text);
+INSERT INTO bookings VALUES(1,'Original','secret-phone',600,'2026-10-18','2026-10-19','private note');
+\ir ../migrations/011_activity_logs.sql
+GRANT SELECT,INSERT,UPDATE,DELETE ON bookings,rooms,beds,booking_rooms,booking_beds,room_daily_rates,guests,payments,images TO service_role;
+SET ROLE service_role;
+INSERT INTO rooms VALUES(1,'Dorm',600);
+UPDATE bookings SET booking_name='Renamed',base_amount=700 WHERE booking_id=1;
+UPDATE bookings SET base_amount=700 WHERE booking_id=1;
+INSERT INTO booking_rooms VALUES(1,1,1);
+INSERT INTO booking_beds VALUES(1,1,1,1,'2026-10-18','2026-10-19');
+UPDATE booking_beds SET bed_id=2 WHERE booking_bed_id=1;
+INSERT INTO room_daily_rates VALUES(1,'2026-10-18',800);
+UPDATE room_daily_rates SET rate=900 WHERE room_id=1;
+DELETE FROM room_daily_rates WHERE room_id=1;
+INSERT INTO guests VALUES(1,1,'Private guest','secret-id');
+UPDATE guests SET id_number='another-secret' WHERE guest_id=1;
+INSERT INTO images VALUES(1,1,'signature','secret-url');
+INSERT INTO payments VALUES(1,1,200);
+DELETE FROM bookings WHERE booking_id=1;
+RESET ROLE;
+DO $$ DECLARE count_before integer; BEGIN
+ IF (SELECT count(*) FROM activity_logs)<>13 THEN RAISE EXCEPTION 'Unexpected log count (no-op/backfill)'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM activity_logs WHERE action='update' AND before_values->>'booking_name'='Original' AND after_values->>'booking_name'='Renamed') THEN RAISE EXCEPTION 'Missing booking history'; END IF;
+ IF (SELECT string_agg(row_to_json(a)::text,'') FROM activity_logs a) LIKE '%secret-%' THEN RAISE EXCEPTION 'Sensitive data leaked'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM activity_logs WHERE entity_type='guest' AND 'id_number'=ANY(changed_fields) AND action='update') THEN RAISE EXCEPTION 'Private field edit not recorded'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM activity_logs WHERE action='reassign' AND before_values->>'bed_id'='1' AND after_values->>'bed_id'='2') THEN RAISE EXCEPTION 'Missing bed move'; END IF;
+ IF (SELECT count(*) FROM activity_logs WHERE action='rate_change')<>3 THEN RAISE EXCEPTION 'Missing rate changes'; END IF;
+ IF EXISTS(SELECT 1 FROM activity_logs WHERE actor_name<>'Admin' OR actor_role<>'Admin') THEN RAISE EXCEPTION 'Invalid actor'; END IF;
+ count_before:=(SELECT count(*) FROM activity_logs);
+ BEGIN
+  INSERT INTO rooms VALUES(2,'Rolled back',600);
+  RAISE EXCEPTION 'deliberate rollback';
+ EXCEPTION WHEN raise_exception THEN NULL; END;
+ IF (SELECT count(*) FROM activity_logs)<>count_before THEN RAISE EXCEPTION 'Rolled back action was logged'; END IF;
+ IF has_table_privilege('service_role','activity_logs','INSERT') OR has_table_privilege('service_role','activity_logs','UPDATE') OR has_table_privilege('service_role','activity_logs','DELETE') OR has_table_privilege('anon','activity_logs','SELECT') THEN RAISE EXCEPTION 'Log privileges too broad'; END IF;
+END $$;

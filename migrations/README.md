@@ -105,3 +105,44 @@ Each booking is labelled with a stable month/room/day marker and deterministic
 request ID. Re-runs skip existing slots. The script uses atomic availability checks,
 leaves spare beds, creates no guests or ID documents, and never deletes existing
 bookings. Demo receipts are dated to arrival or today for future deposits.
+
+## 011 — Activity logs
+
+Apply `011_activity_logs.sql` once in Supabase SQL Editor before using Activity Logs.
+It creates an append-only history of successful booking, room, bed, assignment,
+nightly rate, guest, payment and guest-document record changes. Existing records
+are unchanged; past actions cannot be reconstructed. All history is retained,
+including deleted records. No cleanup job is installed.
+
+Triggers write in the same transaction as the change, including atomic booking
+RPCs, swaps, undo and bulk rate updates. No-op updates create no entry; failed or
+rolled-back transactions create no entry. One action can produce several entries
+(e.g. one rate entry per room/date, or both sides of a bed swap). These are data
+change logs, not page-view/click tracking or failed-request diagnostics. Direct
+SQL changes to the covered tables are captured too. Derived payment-history rows
+and duplicate-request receipts are not logged again.
+
+User and role are fixed to Admin until authenticated identities are implemented;
+`actor_id` is reserved for that integration. Do not trust an actor supplied by a
+browser. Trigger execution is restricted and only the database owner writes log
+rows; the backend service role has read access only. Guest identity values,
+contact details, free-text notes, document URLs and signatures are not copied.
+Changed field names remain visible for updates to excluded values.
+
+`GET /activity-logs` supports `period=today|custom|all`, inclusive `start`/`end`
+dates (Asia/Kolkata), `action`, `entity`, literal `search`, and `page` (50 per page).
+The default is today; this limits the display, not storage. No schema change is
+needed later to keep or archive older logs.
+
+## 012 — Manual assignment logs only
+
+Apply `012_manual_assignment_logs.sql` after 011. Existing logs are untouched.
+New booking allocation and booking-deletion cleanup no longer create assignment
+entries. Booking edits still log explicitly chosen room allocation changes, but
+not automatically selected beds or synchronized assignment dates. Manual bed
+moves, swaps, undo and direct assignment endpoints continue to log normally.
+Booking create/update/delete logs are unaffected. A private transaction-keyed context table is restored after successful calls and
+rolls back on failure; suppression does not carry over to another action. This
+uses no custom PostgreSQL settings, which Supabase can restrict. If the previous
+version of 012 failed with a parameter-permission error, run the entire revised
+012 file. Its transaction preserves existing data and logs.
