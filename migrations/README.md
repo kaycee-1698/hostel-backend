@@ -146,3 +146,18 @@ rolls back on failure; suppression does not carry over to another action. This
 uses no custom PostgreSQL settings, which Supabase can restrict. If the previous
 version of 012 failed with a parameter-permission error, run the entire revised
 012 file. Its transaction preserves existing data and logs.
+
+## 013 — Collect booking payments
+
+Apply `013_collect_booking_payment.sql` after 010 and 011. The collect-payment
+endpoint adds an amount to the existing paid total under a booking row lock,
+recomputes the pending balance/status, and preserves the agreed price and taxes.
+Positive amounts with up to two decimals are accepted, up to the current balance
+and ₹1,000,000 per payment. The existing ₹5 paid-status tolerance is preserved.
+A request UUID makes retries safe. The popup keeps unresolved requests in browser
+session storage and retries the same amount/UUID after an uncertain result.
+Payments appear in the dated payment history and activity logs (including an
+explicit Collected payment entry). Nothing is inserted in the separate legacy
+payments table, which is not used for dashboard totals. Existing balances are
+unchanged by installation. No external payment gateway or money transfer occurs;
+this records money already received by staff.

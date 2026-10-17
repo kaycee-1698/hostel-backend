@@ -12,6 +12,10 @@ router.get('/bookings/search', async (req, res) => {
   try { res.json(await require('../services/bookingSearchService').searchBookings(req.query.q)); }
   catch (error) { console.error('Booking search failed:', error); res.status(500).json({error:'Could not search bookings. Please try again.'}); }
 });
+router.post('/bookings/:id/collect-payment', async (req,res) => {
+  try { res.json(await require('../services/collectPaymentService').collectPayment(req.params.id,req.body)); }
+  catch(error) { res.status(error.status||500).json({error:error.message}); }
+});
 router.get('/bookings/:id', getBooking); // get booking by ID
 router.put('/bookings/:id', updateBooking);  // update booking by ID
 router.delete('/bookings/:id', deleteBooking); // delete booking by ID

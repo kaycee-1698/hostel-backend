@@ -121,7 +121,7 @@ const deleteBookingService = async (id) => {
 
 const getBookingsByBedAndDateRangeService = async (startDate, endDate) => {
   const { data, error } = await supabase.from('booking_beds')
-    .select('booking_bed_id, booking_id, bed_id, check_in, check_out, bookings!inner(booking_name)')
+    .select('booking_bed_id, booking_id, bed_id, check_in, check_out, bookings!inner(booking_name,pending_amount)')
     .lte('check_in', endDate).gt('check_out', startDate);
   if (error) throw new Error('Could not fetch bookings for this date range');
   const calendarBookings = {};
@@ -132,7 +132,7 @@ const getBookingsByBedAndDateRangeService = async (startDate, endDate) => {
       const key = date.toISOString().slice(0, 10);
       calendarBookings[bed_id] ||= {};
       calendarBookings[bed_id][key] = {
-        booking_bed_id, booking_id, booking_name: assignment.bookings.booking_name, check_in, check_out,
+        booking_bed_id, booking_id, booking_name: assignment.bookings.booking_name, pending_amount: assignment.bookings.pending_amount, check_in, check_out,
       };
     }
   }
