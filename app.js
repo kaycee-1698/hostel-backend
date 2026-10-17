@@ -26,6 +26,7 @@ app.use(guestRoutes);
 app.use(imageRoutes);
 app.use(paymentRoutes);
 app.use(roomRoutes);
+app.use(require('./routes/dashboardRoutes'));
 app.use(require('./routes/rateRoutes'));
 
 // Global error handler

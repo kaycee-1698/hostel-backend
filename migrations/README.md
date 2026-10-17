@@ -82,3 +82,26 @@ Rate reads now require `start` and `end` date parameters. New-booking quotes sum
 occupied nights (checkout excluded), times the allocated beds in each room,
 using daily overrides or the room base rate. Quotes exclude taxes and never
 update existing booking amounts; the entered booking price remains authoritative.
+
+## Live admin dashboard (migration 010)
+
+Apply `010_dashboard_payment_history.sql` once before deploying the dashboard.
+It records changes to `bookings.payment_received` in a private dated ledger.
+Opening balances are retained as undated entries, not assigned an invented date.
+Negative corrections reduce net receipts. Deleting a booking retains its payment
+history with a null booking reference. The separate legacy `payments` CRUD table
+is not added to this total, avoiding double counting the booking payment total.
+
+The dashboard uses India dates, actual bed records, and checkout-exclusive
+occupancy. Monthly accommodation sales prorate agreed booking base amounts
+uniformly across occupied nights; they never use today's room rate. Outstanding
+balances include the full balance of each booking overlapping the month, once.
+The dashboard shows recorded net receipts for the month and flags undated opening
+entries. These are operational figures, not a tax or financial accounting report.
+
+`node scripts/seedDashboardMonth.js 2026-10` previews demo data; add `--apply` to
+create it in the configured database. Only use an explicitly approved test dataset.
+Each booking is labelled with a stable month/room/day marker and deterministic
+request ID. Re-runs skip existing slots. The script uses atomic availability checks,
+leaves spare beds, creates no guests or ID documents, and never deletes existing
+bookings. Demo receipts are dated to arrival or today for future deposits.
