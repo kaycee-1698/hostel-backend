@@ -161,3 +161,32 @@ explicit Collected payment entry). Nothing is inserted in the separate legacy
 payments table, which is not used for dashboard totals. Existing balances are
 unchanged by installation. No external payment gateway or money transfer occurs;
 this records money already received by staff.
+
+## 014 — Extras items and payments
+
+Apply `014_extras_manager.sql` after 011. Seeds the supplied prices for towels,
+dental kits, shampoo, conditioner, body wash, locks, early check-in and laundry.
+Merchandise, fines and events are unpriced until configured. No booking totals
+or existing payments are changed.
+
+Items can be added, repriced, removed from sale (active=false), and restored.
+Paid extras are stored separately with immutable item-name/category/unit-price
+snapshots, quantity, payment date/method, notes and an optional booking reference.
+The booking name remains available even if that booking is later deleted.
+Extras do not reduce or add to accommodation balances and are reported on the
+Extras page, not in the dashboard's accommodation sales/payments totals.
+
+Sale creation uses a UUID receipt and transaction lock for safe retries. Payment
+history is paginated, filters are applied in the database, and totals include all
+matching recorded entries, not just the current page. Voiding an incorrect entry
+requires a reason, excludes it from totals, retains history and does not transfer
+or refund money. Item changes, recorded payments and voids appear in Activity Logs.
+Only the backend service role can access these features; staff identity integration
+remains pending along with the rest of the app. No stock/inventory tracking or
+unpaid extras balances are introduced.
+
+### 015_extras_orders.sql
+Run after 014. Adds multi-item sales (including the Toiletries category), unpaid balances and atomic, idempotent partial/full collection. Existing sales remain fully paid; original line prices and booking balances are preserved. Unpaid sales require a booking or customer name. Pending dashboard totals cover all dates and exclude voids. Collections retain amount, method and timestamp in `extra_collections` and appear in activity logs. Extras history dates refer to the sale date; received totals are cumulative receipts against matching sales, not receipts received within that date range.
+
+### 016_invoices.sql
+Creates on-demand, immutable invoice snapshots and a unique UH financial-year series. One issued invoice per booking; manual invoices are independent. Request UUIDs prevent duplicate retries. Re-downloads preserve amounts and payment status as at issue. The app defaults to 5% tax-exclusive prices as requested, with editable line taxes and CGST/SGST or IGST breakdowns. Linked, non-voided extras and received payments are included. Invoice-only edits do not change booking/extras ledgers. No invoices or PDFs are pre-generated. PDFKit renders A4 PDFs on demand from the saved snapshot. Invoice issuance appears in activity logs.

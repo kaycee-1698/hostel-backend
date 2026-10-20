@@ -1,6 +1,6 @@
 const {supabase}=require('../utils/supabase');
 const actions=['create','update','delete','assign','reassign','unassign','rate_change'];
-const entities=['booking','room','bed','bed_assignment','room_assignment','rate','guest','payment','document'];
+const entities=['booking','room','bed','bed_assignment','room_assignment','rate','guest','payment','document','extra_item','extra_sale','invoice'];
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function invalid(message){const error=new Error(message);error.status=400;throw error;}
 function validDate(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&value>='0001-01-01'&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;}
