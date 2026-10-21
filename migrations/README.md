@@ -22,10 +22,10 @@ booking-creation flow or direct assignment endpoints.
 
 Verification:
 
-- Run `npm test` in `hostel-backend` for API-service regression checks.
+- Run `npm test` in `backend` for API-service regression checks.
 - Against an **empty disposable PostgreSQL database**, run
   `psql "$TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f tests/atomicBookingUpdate.sql`
-  from `hostel-backend`. This checks a full room, a forced insert failure after
+  from `backend`. This checks a full room, a forced insert failure after
   deletion, and a successful extension using the original bed. Fixtures and the
   function installation are rolled back at the end.
 - Before release, verify the migration and the same scenarios in a staging copy
@@ -48,7 +48,7 @@ reference the new guest. It is not a live-project migration.
 
 Migration 007 keeps duplicate-save receipts private using RLS. The backend needs
 its own Supabase secret/service-role credential, configured as
-`SUPABASE_SERVICE_ROLE_KEY` in `hostel-backend/.env` (or the backend hosting
+`SUPABASE_SERVICE_ROLE_KEY` in `backend/.env` (or the backend hosting
 provider's environment settings). Restart the backend after changing it.
 `SUPABASE_API_KEY` remains a fallback for existing server configurations.
 Never put this credential in frontend files or any `NEXT_PUBLIC_` variable.

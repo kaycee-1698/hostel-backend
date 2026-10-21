@@ -1,4 +1,4 @@
-// Run from hostel-backend: node scripts/seedDashboardMonth.js 2026-10 [--apply]
+// Run from backend: node scripts/seedDashboardMonth.js 2026-10 [--apply]
 // Uses existing atomic booking creation. Never edits/deletes existing bookings.
 const crypto=require('node:crypto');
 const {supabase}=require('../utils/supabase');
