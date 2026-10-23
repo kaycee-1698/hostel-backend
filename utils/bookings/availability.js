@@ -13,6 +13,9 @@ const checkAvailability = async (room_id, check_in, check_out, beds_required, ex
 
   if (!beds || beds.length === 0) return 0;
 
+  const {data:room,error:roomError}=await supabase.from('rooms').select('room_type').eq('room_id',room_id).single();
+  if(roomError)throw new Error('Could not check room availability.');
+
   const bedIds = beds.map((bed) => bed.bed_id);
 
   // Fetch bookings that clash with the given dates
@@ -37,6 +40,7 @@ const checkAvailability = async (room_id, check_in, check_out, beds_required, ex
   const occupiedBedIds = new Set(overlappingBookings.map((b) => b.bed_id));
   const availableBeds = bedIds.filter((id) => !occupiedBedIds.has(id));
 
+  if(room.room_type==='private'&&occupiedBedIds.size)return 0;
   return availableBeds.length;
 };
 

@@ -6,6 +6,8 @@ const app = express(); //create an instance of express application
 
 app.use(cors()); //Enable cors
 app.use('/guests', express.json({ limit: '22mb' })); // Up to three 5 MB images, base64 encoded
+app.use('/property/photos', express.json({limit:'8mb'}));
+app.use('/rooms/:id/photos', express.json({limit:'8mb'}));
 app.use(express.json({limit:'1mb'})); //Parse incoming JSON requests
 
 // Routes to handle specific API requests
@@ -25,7 +27,9 @@ app.use(bookingRoomsRoutes);
 app.use(guestRoutes);
 app.use(imageRoutes);
 app.use(paymentRoutes);
+app.use(require('./routes/roomCatalogueRoutes'));
 app.use(roomRoutes);
+app.use(require('./routes/propertyRoutes'));
 app.use(require('./routes/dashboardRoutes'));
 app.use(require('./routes/activityLogRoutes'));
 app.use(require('./routes/extraRoutes'));
@@ -34,7 +38,7 @@ app.use(require('./routes/rateRoutes'));
 
 // Global error handler
 app.use((err, req, res, next) => {
-  res.status(err.status || 500).json({ message: err.status === 413 ? 'Check-in images are too large. Maximum 5 MB per image.' : err.message });
+  res.status(err.status || 500).json({ message: err.status === 413 ? 'Images are too large. Maximum 5 MB per image.' : err.message });
 });
 
 module.exports = app;

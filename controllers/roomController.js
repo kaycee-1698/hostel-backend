@@ -2,18 +2,15 @@ const { supabase } = require('../utils/supabase'); // Ensure correct import
 const { getRoomAvailabilityService } = require('../services/roomService'); // Import the service
 
 const createRoom = async (req, res) => {
-  const { room_name, base_rate,
-    capacity = 0 // Default capacity to 0 if not provided
-     } = req.body;
-
-  if(typeof room_name!=='string'||!room_name.trim()||!require('../services/rateValidation').validAmount(base_rate))return res.status(400).json({error:'Enter a room name and valid base rate.'});
+  let details;
+  try { details = require('../services/roomCatalogue').roomDetails(req.body||{}); }
+  catch(error){ return res.status(400).json({error:error.message}); }
 
   // Insert new room into the 'rooms' table
   const { data, error } = await supabase
     .from('rooms')
     .insert([{
-      room_name,
-      capacity, base_rate
+      ...details, capacity:0
     }])
     .select().single(); // Use .single() to return a single object
 
@@ -34,21 +31,25 @@ const getAllRooms = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 
-  res.status(200).json({ rooms: data });
+  res.status(200).json({ rooms: data.map(room=>require('../services/roomCatalogue').decorateRoom(supabase,room)) });
 };
 
 // Update Room
 const updateRoom = async (req, res) => {
     const { id } = req.params;
-    const updateData = req.body;
+    let updateData;
+    try {updateData=require('../services/roomCatalogue').roomDetails(req.body||{},true);}
+    catch(error){return res.status(400).json({error:error.message});}
+    if(!Object.keys(updateData).length)return res.status(400).json({error:'No room changes supplied.'});
   
     const { data, error } = await supabase
       .from('rooms')
       .update(updateData)
-      .eq('room_id', id);
+      .eq('room_id', id).select().maybeSingle();
   
-    if (error) return res.status(500).json({ message: error.message });
+    if (error) return res.status(error.code==='P0001'?409:500).json({ error:error.code==='P0001'?error.message:'Could not save room details. Please try again.' });
   
+    if(!data)return res.status(404).json({error:'Room not found. Refresh and try again.'});
     res.status(200).json({ message: "Room updated successfully", data });
   };
   
@@ -89,7 +90,7 @@ const deleteRoom = async (req, res) => {
     if (error) {
       return res.status(400).json({ error: error.message });
     }
-    res.json(data);
+    res.json(require('../services/roomCatalogue').decorateRoom(supabase,data));
   };
 
   const updateRoomCapacity = async (req, res) => {

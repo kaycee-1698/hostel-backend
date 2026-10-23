@@ -190,3 +190,9 @@ Run after 014. Adds multi-item sales (including the Toiletries category), unpaid
 
 ### 016_invoices.sql
 Creates on-demand, immutable invoice snapshots and a unique UH financial-year series. One issued invoice per booking; manual invoices are independent. Request UUIDs prevent duplicate retries. Re-downloads preserve amounts and payment status as at issue. The app defaults to 5% tax-exclusive prices as requested, with editable line taxes and CGST/SGST or IGST breakdowns. Linked, non-voided extras and received payments are included. Invoice-only edits do not change booking/extras ledgers. No invoices or PDFs are pre-generated. PDFKit renders A4 PDFs on demand from the saved snapshot. Invoice issuance appears in activity logs.
+
+## 017 — Room catalogue
+Run `017_room_catalogue.sql` in Supabase SQL Editor. Existing rooms become dormitories; existing bookings and rates are unchanged. Adds descriptions, ordered promotional photos, and the public `room-photos` bucket. Uploads use the backend service credential; guest IDs remain in their separate private bucket. New private-room occupancy is exclusive and new price quotes charge once per room/night. Configure each private room's beds to represent its maximum guest capacity.
+
+## 018 — Property details
+Run `018_property_details.sql` after 017. Adds the property profile, public `property-photos` bucket, version-checked saves and activity logs. The guest website reads published content through `/public/property`; set its `BACKEND_URL` to the backend address. Admin edits publish on Save. Existing bookings and rooms are unchanged. Photos removed from the profile no longer appear on the website; stored objects are retained, including abandoned uploads, pending a future cleanup policy.

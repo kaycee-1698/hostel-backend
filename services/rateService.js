@@ -2,9 +2,10 @@ const {supabase}=require('../utils/supabase');
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
 function validRange(start,end){return validDate(start)&&validDate(end)&&end>=start;}
 async function loadRates(start,end){
- const {data:rooms,error}=await supabase.from('rooms').select('room_id,base_rate');
+ const {data:rooms,error}=await supabase.from('rooms').select('room_id,base_rate,room_type');
  if(error)throw error;
  const rates=Object.fromEntries(rooms.map(room=>[room.room_id,Number(room.base_rate)]));
+ Object.defineProperty(rates,'room_types',{value:Object.fromEntries(rooms.map(room=>[room.room_id,room.room_type||'dormitory']))});
  for(let offset=0;;offset+=1000){
   const result=await supabase.from('room_daily_rates').select('*').gte('stay_date',start).lte('stay_date',end).order('room_id').order('stay_date').range(offset,offset+999);
   if(result.error)throw result.error;
@@ -20,7 +21,7 @@ function calculateQuote(rates,start,end,rooms){
   for(const [room,count] of Object.entries(rooms)){
    const rate=rates[`${room}:${date}`]??rates[room];
    if(!Number.isFinite(rate))throw new Error('Room rate unavailable');
-   cents+=Math.round(rate*100)*count;
+   cents+=Math.round(rate*100)*(rates.room_types?.[room]==='private'?1:count);
   }
  }
  return cents/100;

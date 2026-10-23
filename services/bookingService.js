@@ -20,6 +20,7 @@ const createBookingService = async (bookingData) => {
     // Keep database diagnostics in server logs, never in the staff-facing form.
     console.error('Booking creation failed:', error);
     const message = error.message || '';
+    if(error.code==='P0001'&&/private room is already occupied/.test(message))throw new Error('This private room is no longer available for these dates. Choose another room or change the dates.');
     if (error.code === 'P0001' && /does not have .* available bed/.test(message)) {
       throw new Error('There aren’t enough beds available in the selected dorm for the full stay. Choose another dorm or change the dates.');
     }
